@@ -1,7 +1,7 @@
 import { MpvPlayerView } from "@airwave/mpv-player";
 import { Maximize2, X } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Platform, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { ActivityIndicator, AppState, Platform, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { setStatusBarHidden } from "expo-status-bar";
 
 import { TvPressable as Pressable } from "@/components/tv-pressable";
@@ -115,6 +115,20 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       unsub();
     };
   }, [layout, goFull]);
+  // Re-anchor to live broadcast when returning to foreground from background
+  useEffect(() => {
+    let lastState = AppState.currentState;
+    const sub = AppState.addEventListener("change", (nextState) => {
+      if (lastState.match(/inactive|background/) && nextState === "active") {
+        if (playingRef.current) {
+          const curId = playingRef.current;
+          setActive(curId);
+        }
+      }
+      lastState = nextState;
+    });
+    return () => sub.remove();
+  }, []);
 
   const value = useMemo<PlayerCtx>(
     () => ({ activeChannelId, playingChannelId, layout, miniFocused, miniSel, tune, goFull, goMini, stop, focusMini, blurMini, miniMove, miniActivate, channelStep, setMiniSlot }),

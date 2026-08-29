@@ -7,6 +7,7 @@ import android.view.Gravity
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.widget.FrameLayout
+import expo.modules.core.interfaces.LifecycleEventListener
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
@@ -18,9 +19,10 @@ import expo.modules.kotlin.views.ExpoView
  */
 @SuppressLint("ViewConstructor")
 class MpvPlayerView(context: Context, appContext: AppContext) :
-  ExpoView(context, appContext), MpvCoreDelegate, SurfaceHolder.Callback {
+  ExpoView(context, appContext), MpvCoreDelegate, SurfaceHolder.Callback, AudioFocusListener, LifecycleEventListener {
 
   private val core = MpvCore(context.applicationContext)
+  private val audioFocusHelper = AudioFocusHelper(context.applicationContext, this)
   private val surfaceView = SurfaceView(context)
   // The SurfaceView lives inside an aspect-ratio container (ExoPlayer's AspectRatioFrameLayout pattern) so
   // aspect is applied ONCE per video, declaratively, in the layout pass — instead of imperatively mutating
@@ -82,6 +84,7 @@ class MpvPlayerView(context: Context, appContext: AppContext) :
     )
     addView(videoContainer)
     core.delegate = this
+    appContext.registerLifecycleListener(this)
   }
 
   // MARK: surface lifecycle
@@ -95,6 +98,9 @@ class MpvPlayerView(context: Context, appContext: AppContext) :
   }
 
   override fun surfaceDestroyed(holder: SurfaceHolder) {
+    audioFocusHelper.abandonFocus()
+    surfaceView.keepScreenOn = false
+    core.setPaused(true)
     core.detachSurface()
   }
 
@@ -138,6 +144,11 @@ class MpvPlayerView(context: Context, appContext: AppContext) :
     // still sleep when paused. `keepScreenOn` sets the window's FLAG_KEEP_SCREEN_ON while the view is
     // attached, and clears automatically on unmount. Android-only — iOS/tvOS hold the idle timer natively.
     surfaceView.keepScreenOn = videoActive && !paused
+    if (paused) {
+      audioFocusHelper.abandonFocus()
+    } else {
+      audioFocusHelper.requestFocus()
+    }
     core.setPaused(paused)
   }
   fun setMuted(muted: Boolean) = core.setMuted(muted)
@@ -151,14 +162,55 @@ class MpvPlayerView(context: Context, appContext: AppContext) :
 
   // MARK: imperative control (from module AsyncFunctions)
 
-  fun play() = core.setPaused(false)
-  fun pause() = core.setPaused(true)
+  fun play() {
+    audioFocusHelper.requestFocus()
+    core.setPaused(false)
+  }
+  fun pause() {
+    audioFocusHelper.abandonFocus()
+    core.setPaused(true)
+  }
   fun seek(seconds: Double) = core.seek(seconds)
   // Audio-only capabilities (bumper bed + radio) on the same single engine.
   fun fadeVolume(target: Double, durationMs: Double) = core.fadeVolume(target, durationMs)
   fun setLoop(loop: Boolean) = core.setLoop(loop)
   fun setRate(rate: Double) = core.setRate(rate)
   fun appendTrack(url: String, startTime: Double) = core.append(url, startTime)
+
+  // MARK: AudioFocusListener
+
+  override fun onAudioFocusLost(permanent: Boolean) {
+    setPaused(true)
+  }
+
+  override fun onAudioFocusGained() {
+    setPaused(false)
+  }
+
+  override fun onAudioDuck(duck: Boolean) {
+    core.setDucked(duck)
+  }
+
+  // MARK: LifecycleEventListener
+
+  override fun onHostResume() {
+    // Activity resumed
+  }
+
+  override fun onHostPause() {
+    audioFocusHelper.abandonFocus()
+    surfaceView.keepScreenOn = false
+    core.setPaused(true)
+  }
+
+  override fun onHostDestroy() {
+    appContext.unregisterLifecycleListener(this)
+    audioFocusHelper.abandonFocus()
+    if (!disposed) {
+      disposed = true
+      core.dispose()
+    }
+  }
 
   // MARK: load coalescing
 
@@ -183,11 +235,13 @@ class MpvPlayerView(context: Context, appContext: AppContext) :
     lastLoadedSource = pendingSource
     val src = pendingSource
     if (src.isNullOrEmpty()) {
+      audioFocusHelper.abandonFocus()
       core.stop()
       videoActive = false
       surfaceView.keepScreenOn = false
       return
     }
+    audioFocusHelper.requestFocus()
     core.load(src, pendingStartTime, pendingMode)
     // Video playback keeps the screen awake (audio-only bumper/radio doesn't); paused state refines it.
     videoActive = pendingMode != "audio"
@@ -229,6 +283,8 @@ class MpvPlayerView(context: Context, appContext: AppContext) :
 
   override fun onDetachedFromWindow() {
     super.onDetachedFromWindow()
+    appContext.unregisterLifecycleListener(this)
+    audioFocusHelper.abandonFocus()
     if (!disposed) {
       disposed = true
       core.dispose()

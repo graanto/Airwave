@@ -5,6 +5,9 @@ on:
   push:
     paths:
       - '.github/workflows/build-tv-apk.yml'
+      - 'apps/tv-native/**'
+      - 'packages/mpv-player/**'
+      - 'scripts/**'
 
 permissions:
   contents: write

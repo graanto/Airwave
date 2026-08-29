@@ -215,6 +215,14 @@ class MpvCore(private val appContext: Context) {
     launchOnPlayer { it.setProperty("volume", volume) }
   }
 
+  /** Duck volume to 20% for transient audio focus interruptions (e.g. navigation / alerts). */
+  fun setDucked(ducked: Boolean) {
+    launchOnPlayer {
+      val vol = if (ducked) currentVolume * 0.2 else currentVolume
+      it.setProperty("volume", vol)
+    }
+  }
+
   fun setAudioTrack(id: Int) = launchOnPlayer {
     if (id < 0) it.setProperty("aid", "no") else it.setProperty("aid", id)
   }

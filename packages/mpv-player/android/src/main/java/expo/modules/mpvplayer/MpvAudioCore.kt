@@ -22,7 +22,7 @@ import kotlin.math.abs
  * NEVER attach a Surface. Deliberately separate from `MpvCore` (the video path stays untouched); safe to run
  * as a second, independent mpv instance alongside it.
  */
-class MpvAudioCore(private val appContext: Context) {
+class MpvAudioCore(private val appContext: Context) : AudioFocusListener {
   /** (currentTime, duration) in seconds, on each `time-pos` tick. */
   var onProgress: ((Double, Double) -> Unit)? = null
   /** Natural end of the track (mpv EOF) — NOT our own stop/replace. */
@@ -32,6 +32,7 @@ class MpvAudioCore(private val appContext: Context) {
   /** Stalled waiting on the network buffer (mpv `paused-for-cache`). */
   var onBuffering: ((Boolean) -> Unit)? = null
 
+  private val audioFocusHelper = AudioFocusHelper(appContext, this)
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
   private var player: MpvPlayer? = null
   // create() is suspend, so a load() can arrive before the player exists — run it on completion.
@@ -90,6 +91,7 @@ class MpvAudioCore(private val appContext: Context) {
   fun load(url: String, startTime: Double = 0.0) {
     pendingLoadUrl = url
     pendingLoadStart = startTime
+    audioFocusHelper.requestFocus()
     val p = player ?: return // setup()'s create() runs it on completion
     scope.launch { doLoad(p, url, startTime) }
   }
@@ -110,9 +112,18 @@ class MpvAudioCore(private val appContext: Context) {
     else it.command("loadfile", url, "append", "-1")
   }
 
-  fun play() = onPlayer { it.setProperty("pause", false) }
-  fun pause() = onPlayer { it.setProperty("pause", true) }
-  fun stop() = onPlayer { it.command("stop") }
+  fun play() {
+    audioFocusHelper.requestFocus()
+    onPlayer { it.setProperty("pause", false) }
+  }
+  fun pause() {
+    audioFocusHelper.abandonFocus()
+    onPlayer { it.setProperty("pause", true) }
+  }
+  fun stop() {
+    audioFocusHelper.abandonFocus()
+    onPlayer { it.command("stop") }
+  }
   fun seek(seconds: Double) = onPlayer { it.command("seek", seconds.toString(), "absolute") }
   fun setMuted(muted: Boolean) = onPlayer { it.setProperty("mute", muted) }
   /** Playback speed (1.0 = normal). mpv `speed`. */
@@ -123,6 +134,23 @@ class MpvAudioCore(private val appContext: Context) {
     val clamped = v.coerceIn(0.0, 1.0)
     currentVolume = clamped
     onPlayer { it.setProperty("volume", clamped * 100.0) }
+  }
+
+  // MARK: AudioFocusListener
+
+  override fun onAudioFocusLost(permanent: Boolean) {
+    onPlayer { it.setProperty("pause", true) }
+  }
+
+  override fun onAudioFocusGained() {
+    onPlayer { it.setProperty("pause", false) }
+  }
+
+  override fun onAudioDuck(duck: Boolean) {
+    onPlayer {
+      val vol = if (duck) currentVolume * 0.2 else currentVolume
+      it.setProperty("volume", vol * 100.0)
+    }
   }
 
   /**
@@ -157,6 +185,7 @@ class MpvAudioCore(private val appContext: Context) {
   fun setLoop(loop: Boolean) = onPlayer { it.setProperty("loop-file", if (loop) "inf" else "no") }
 
   fun dispose() {
+    audioFocusHelper.abandonFocus()
     val p = player
     player = null
     scope.cancel()
