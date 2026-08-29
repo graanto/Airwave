@@ -62,7 +62,7 @@ jobs:
         run: |
           cd apps/tv-native/android
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew :app:assembleRelease --no-daemon
 
       - name: Upload TV APK Artifact
         uses: actions/upload-artifact@v4
