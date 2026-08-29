@@ -112,3 +112,5 @@ apps/desktop/pg-launcher/
 *.cer
 *.certSigningRequest
 .secrets/
+
+apk-output/

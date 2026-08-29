@@ -58,6 +58,10 @@ jobs:
           cd apps/tv-native
           npx expo prebuild --platform android --clean
 
+      - name: Patch TV Manifest & TV Banner
+        run: |
+          python scripts/patch-tv-manifest.py
+
       - name: Build Standalone Release APK
         run: |
           cd apps/tv-native/android
