@@ -143,11 +143,15 @@ export function useTvPlayer(channelId: string | null, options: PlayerOptions = {
   selectedSubIdRef.current = selectedSubId;
   const [audioTrack, setAudioTrack] = useState<number | undefined>(undefined);
   const [subtitleTrack, setSubtitleTrack] = useState<number | undefined>(-1);
+  const audioTrackRef = useRef<number | undefined>(audioTrack);
+  audioTrackRef.current = audioTrack;
+  const subtitleTrackRef = useRef<number | undefined>(subtitleTrack);
+  subtitleTrackRef.current = subtitleTrack;
 
   // audioMode is client-side only (mpv output layout — not a server param), but it's in the reload key so
   // flipping Stereo/Multichannel re-resolves the current program at the same spot and mpv re-inits its
-  // audio chain with the new `audio-channels`.
-  const paramsKey = `${options.quality ?? ""}|${options.audioMode ?? ""}`;
+  // audio chain with the new `audio-channels`. Include audio/subtitle stream IDs so prop changes re-resolve.
+  const paramsKey = `${options.quality ?? ""}|${options.audioMode ?? ""}|${options.audioStreamId ?? ""}|${options.subtitleStreamId ?? ""}`;
   const optionsRef = useRef(options);
   optionsRef.current = options;
   // Only the feature panel (full-screen chrome) shows the scrubber, so only build it when full — skip the
@@ -288,7 +292,12 @@ export function useTvPlayer(channelId: string | null, options: PlayerOptions = {
         setStatus((s) => ({ ...s, loading: true, error: null, buffering: true }));
         let info: MediaInfo;
         try {
-          info = await api.media(channelId, entry.slot.ratingKey, offset, { deviceId: deviceId(), quality: optionsRef.current.quality, audioStreamId: optionsRef.current.audioStreamId, subtitleStreamId: optionsRef.current.subtitleStreamId });
+          info = await api.media(channelId, entry.slot.ratingKey, offset, {
+            deviceId: deviceId(),
+            quality: optionsRef.current.quality,
+            audioStreamId: selectedAudioIdRef.current ?? optionsRef.current.audioStreamId,
+            subtitleStreamId: selectedSubIdRef.current ?? optionsRef.current.subtitleStreamId,
+          });
         } catch (err) {
           if (gen !== genRef.current) return;
           setStatus((s) => ({ ...s, loading: false, error: err instanceof Error ? err.message : "Playback failed" }));
@@ -322,6 +331,7 @@ export function useTvPlayer(channelId: string | null, options: PlayerOptions = {
         if (activeAudio) {
           targetAudioIdx = activeAudio.index ?? 1;
           setSelectedAudioId(activeAudio.id);
+          selectedAudioIdRef.current = activeAudio.id;
         } else if (info.audioTracks.length > 0) {
           targetAudioIdx = info.audioTracks[0]?.index ?? 1;
         }
@@ -339,14 +349,22 @@ export function useTvPlayer(channelId: string | null, options: PlayerOptions = {
         if (activeSub) {
           targetSubIdx = activeSub.index ?? 1;
           setSelectedSubId(activeSub.id);
+          selectedSubIdRef.current = activeSub.id;
         } else {
           targetSubIdx = -1;
-          if (!curSubId) setSelectedSubId("off");
+          if (!curSubId) {
+            setSelectedSubId("off");
+            selectedSubIdRef.current = "off";
+          }
         }
 
+        audioTrackRef.current = targetAudioIdx;
+        subtitleTrackRef.current = targetSubIdx;
         if (info.mode === "direct") {
           setAudioTrack(targetAudioIdx);
           setSubtitleTrack(targetSubIdx);
+          if (targetAudioIdx != null && targetAudioIdx > 0) void viewRef.current?.setAudioTrack(targetAudioIdx);
+          if (targetSubIdx != null) void viewRef.current?.setSubtitleTrack(targetSubIdx);
         }
 
         // mpv loads by setting the source prop; `startTime` opens direct-play AT the offset (loadfile
@@ -466,6 +484,8 @@ export function useTvPlayer(channelId: string | null, options: PlayerOptions = {
       // stays as a backstop.)
       console.log(`[mpv] onLoad play? paused=${pausedRef.current}`);
       if (!pausedRef.current) void viewRef.current?.play();
+      if (audioTrackRef.current != null && audioTrackRef.current > 0) void viewRef.current?.setAudioTrack(audioTrackRef.current);
+      if (subtitleTrackRef.current != null) void viewRef.current?.setSubtitleTrack(subtitleTrackRef.current);
       recordLog(width > 0 && height > 0 ? "playing" : "not_decoding");
       setStatus((s) => (s.buffering ? { ...s, buffering: false } : s));
     },
@@ -479,6 +499,8 @@ export function useTvPlayer(channelId: string | null, options: PlayerOptions = {
     // first painted frame) is a second, independent hook: if a load ever paints without onLoad's play()
     // sticking, this catches it. Guarded by pausedRef so a user pause is respected.
     if (!pausedRef.current) void viewRef.current?.play();
+    if (audioTrackRef.current != null && audioTrackRef.current > 0) void viewRef.current?.setAudioTrack(audioTrackRef.current);
+    if (subtitleTrackRef.current != null) void viewRef.current?.setSubtitleTrack(subtitleTrackRef.current);
     setStatus((s) => (s.buffering ? { ...s, buffering: false } : s));
   }, []);
   const onBuffering = useCallback((e: { nativeEvent: { buffering: boolean } }) => {
@@ -747,16 +769,16 @@ export function useTvPlayer(channelId: string | null, options: PlayerOptions = {
   const selectAudio = useCallback(
     (id?: string) => {
       setSelectedAudioId(id);
+      selectedAudioIdRef.current = id;
       if (currentRef.current?.mode === "direct") {
-        if (!id) {
-          setAudioTrack(1);
-          void viewRef.current?.setAudioTrack(1);
-        } else {
+        let idx = 1;
+        if (id) {
           const t = tracks.audio.find((x) => x.id === id);
-          const idx = t?.index ?? 1;
-          setAudioTrack(idx);
-          void viewRef.current?.setAudioTrack(idx);
+          idx = t?.index ?? 1;
         }
+        setAudioTrack(idx);
+        audioTrackRef.current = idx;
+        void viewRef.current?.setAudioTrack(idx);
       } else {
         if (currentRef.current?.kind === "PROGRAM") {
           void goTo(currentEffective());
@@ -770,16 +792,16 @@ export function useTvPlayer(channelId: string | null, options: PlayerOptions = {
     (id?: string) => {
       const subId = id || "off";
       setSelectedSubId(subId);
+      selectedSubIdRef.current = subId;
       if (currentRef.current?.mode === "direct") {
-        if (subId === "off") {
-          setSubtitleTrack(-1);
-          void viewRef.current?.setSubtitleTrack(-1);
-        } else {
+        let idx = -1;
+        if (subId !== "off") {
           const t = tracks.subtitle.find((x) => x.id === subId);
-          const idx = t?.index ?? -1;
-          setSubtitleTrack(idx);
-          void viewRef.current?.setSubtitleTrack(idx);
+          idx = t?.index ?? -1;
         }
+        setSubtitleTrack(idx);
+        subtitleTrackRef.current = idx;
+        void viewRef.current?.setSubtitleTrack(idx);
       } else {
         if (currentRef.current?.kind === "PROGRAM") {
           void goTo(currentEffective());
