@@ -79,6 +79,11 @@ model Channel {
   sortField   String           @default("title")
   sortDir     String           @default("asc")
 
+  // Default audio/subtitle language preferences for this channel (ISO 639-1 / 639-2 code, e.g. "jpn", "eng").
+  // Used by native players (e.g. mpv on Android TV) to auto-select matching audio and subtitle streams.
+  defaultAudioLang    String?
+  defaultSubtitleLang String?
+
   // Provenance: auto-generated channels carry `generated=true` + the `presetKey`
   // they came from, so a regen deletes + rebuilds them without wiping manual channels.
   generated Boolean @default(false)

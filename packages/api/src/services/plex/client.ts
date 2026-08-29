@@ -579,7 +579,7 @@ export async function getMetadata(
 /** One available audio or subtitle track. `id` is the Plex stream id — the client selects
  *  the EXACT track by id (multiple same-language tracks — 5.1 / stereo / commentary — are
  *  distinct), not by language. */
-export type PlaybackTrack = { id: string; lang: string; label: string };
+export type PlaybackTrack = { id: string; lang: string; label: string; index?: number };
 
 export type PlaybackInfo = {
   /** `direct` = raw file, native `<video>`, client seeks to the offset.
@@ -684,11 +684,13 @@ const streamLabel = (s: PlexStream): string => {
 function listTracks(streams: PlexStream[]): PlaybackTrack[] {
   const out: PlaybackTrack[] = [];
   const seen = new Set<string>();
+  let idx = 1;
   for (const s of streams) {
     const id = s.id != null ? String(s.id) : "";
     if (!id || seen.has(id)) continue;
     seen.add(id);
-    out.push({ id, lang: streamLang(s), label: streamLabel(s) });
+    out.push({ id, lang: streamLang(s), label: streamLabel(s), index: idx });
+    idx++;
   }
   return out;
 }

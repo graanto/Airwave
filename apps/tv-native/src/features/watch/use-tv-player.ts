@@ -101,7 +101,28 @@ const RESUME_MAX_RETRIES = 2;
 
 const titleOf = (g?: GuideMeta | null) => (!g ? "" : g.showTitle ? `${g.showTitle} — ${g.title}` : g.title);
 
-export type PlayerOptions = { quality?: string; audioStreamId?: string; subtitleStreamId?: string; audioMode?: string };
+export type PlayerOptions = {
+  quality?: string;
+  audioStreamId?: string;
+  subtitleStreamId?: string;
+  audioMode?: string;
+  defaultAudioLang?: string | null;
+  defaultSubtitleLang?: string | null;
+};
+
+export function langMatches(trackLang?: string, prefLang?: string | null): boolean {
+  if (!trackLang || !prefLang) return false;
+  const t = trackLang.toLowerCase().trim();
+  const p = prefLang.toLowerCase().trim();
+  if (t === p) return true;
+  if (p === "ja" || p === "jpn" || p === "japanese") {
+    return t === "ja" || t === "jpn" || t === "japanese" || t.startsWith("jp");
+  }
+  if (p === "en" || p === "eng" || p === "english") {
+    return t === "en" || t === "eng" || t === "english";
+  }
+  return t.startsWith(p) || p.startsWith(t);
+}
 
 export function useTvPlayer(channelId: string | null, options: PlayerOptions = {}, scrubberActive = true) {
   const viewRef = useRef<MpvPlayerViewRef>(null);
@@ -112,10 +133,21 @@ export function useTvPlayer(channelId: string | null, options: PlayerOptions = {
   const [mode, setMode] = useState<"video" | "audio">("video");
   const positionSecRef = useRef(0); // latest onProgress currentTime (seconds); the effectiveTime clock reads this
   const playingRef = useRef(false);
+
+  // Active track selections & indexes for mpv
+  const [selectedAudioId, setSelectedAudioId] = useState<string | undefined>(options.audioStreamId);
+  const [selectedSubId, setSelectedSubId] = useState<string | undefined>(options.subtitleStreamId);
+  const selectedAudioIdRef = useRef(selectedAudioId);
+  selectedAudioIdRef.current = selectedAudioId;
+  const selectedSubIdRef = useRef(selectedSubId);
+  selectedSubIdRef.current = selectedSubId;
+  const [audioTrack, setAudioTrack] = useState<number | undefined>(undefined);
+  const [subtitleTrack, setSubtitleTrack] = useState<number | undefined>(-1);
+
   // audioMode is client-side only (mpv output layout — not a server param), but it's in the reload key so
   // flipping Stereo/Multichannel re-resolves the current program at the same spot and mpv re-inits its
   // audio chain with the new `audio-channels`.
-  const paramsKey = `${options.quality ?? ""}|${options.audioStreamId ?? ""}|${options.subtitleStreamId ?? ""}|${options.audioMode ?? ""}`;
+  const paramsKey = `${options.quality ?? ""}|${options.audioMode ?? ""}`;
   const optionsRef = useRef(options);
   optionsRef.current = options;
   // Only the feature panel (full-screen chrome) shows the scrubber, so only build it when full — skip the
@@ -276,6 +308,47 @@ export function useTvPlayer(channelId: string | null, options: PlayerOptions = {
         currentRef.current = loaded;
         pausedRef.current = false;
         setTracks({ audio: info.audioTracks, subtitle: info.subtitleTracks });
+
+        // Auto-select audio and subtitle tracks for direct-play media
+        let targetAudioIdx: number | undefined;
+        let targetSubIdx: number | undefined;
+
+        // 1. Audio selection
+        const curAudioId = selectedAudioIdRef.current;
+        let activeAudio = curAudioId ? info.audioTracks.find((t) => t.id === curAudioId) : undefined;
+        if (!activeAudio && optionsRef.current.defaultAudioLang) {
+          activeAudio = info.audioTracks.find((t) => langMatches(t.lang, optionsRef.current.defaultAudioLang));
+        }
+        if (activeAudio) {
+          targetAudioIdx = activeAudio.index ?? 1;
+          setSelectedAudioId(activeAudio.id);
+        } else if (info.audioTracks.length > 0) {
+          targetAudioIdx = info.audioTracks[0]?.index ?? 1;
+        }
+
+        // 2. Subtitle selection
+        const curSubId = selectedSubIdRef.current;
+        let activeSub: Track | undefined;
+        if (curSubId) {
+          if (curSubId !== "off") {
+            activeSub = info.subtitleTracks.find((t) => t.id === curSubId);
+          }
+        } else if (optionsRef.current.defaultSubtitleLang && optionsRef.current.defaultSubtitleLang !== "off") {
+          activeSub = info.subtitleTracks.find((t) => langMatches(t.lang, optionsRef.current.defaultSubtitleLang));
+        }
+        if (activeSub) {
+          targetSubIdx = activeSub.index ?? 1;
+          setSelectedSubId(activeSub.id);
+        } else {
+          targetSubIdx = -1;
+          if (!curSubId) setSelectedSubId("off");
+        }
+
+        if (info.mode === "direct") {
+          setAudioTrack(targetAudioIdx);
+          setSubtitleTrack(targetSubIdx);
+        }
+
         // mpv loads by setting the source prop; `startTime` opens direct-play AT the offset (loadfile
         // start=). Baseline is set in onLoad/onFirstFrame — see the event handlers below.
         logCtxRef.current = {
@@ -301,14 +374,9 @@ export function useTvPlayer(channelId: string | null, options: PlayerOptions = {
           // must play() explicitly.
           console.log(`[mpv] RESUME ${offset}s (same media, ${info.mode})`);
           positionSecRef.current = offset;
-          // SEEK (while still paused) THEN a single play(). Seeking a paused mpv is silent, so there's no
-          // audio artifact; the plain `pause=no` then resumes cleanly at the new position (exactly what the
-          // Play button does). We formerly play()'d BEFORE the seek (v0.9.68) to force a resume, but that was
-          // compensating for the AVAudioSession conflict between the two mpv cores that ACTUALLY caused the
-          // stall — fixed in v0.9.69 by harmonizing their shared session. With that gone, playing first only
-          // resumes at the OLD (pre-bumper) position for a beat before the seek → an audible crackle. So:
-          // seek first, then one play().
           if (info.mode === "direct") {
+            if (targetAudioIdx != null && targetAudioIdx > 0) void viewRef.current?.setAudioTrack(targetAudioIdx);
+            if (targetSubIdx != null) void viewRef.current?.setSubtitleTrack(targetSubIdx);
             // A raw file's URL is offset-independent → seek to the new position (fast ffmpeg estimate); its
             // time-pos IS the media offset, so the baseline can be anchored inline.
             loaded.playStartCurrentTime = offset;
@@ -644,6 +712,10 @@ export function useTvPlayer(channelId: string | null, options: PlayerOptions = {
     transitioning.current = false;
     resumeWatchRef.current = false; // disarm the resume-stall watchdog across channel change / Close
     bumperMusicActiveRef.current = false; // no bumper bed carries across a channel change / Close
+    setSelectedAudioId(optionsRef.current.audioStreamId);
+    setSelectedSubId(optionsRef.current.subtitleStreamId);
+    setAudioTrack(undefined);
+    setSubtitleTrack(-1);
     if (!channelId) {
       // Close: pause + release. The view is conditionally rendered on `source`, so nulling it unmounts
       // the MpvPlayerView (deinit → mpv_terminate_destroy); pause() first halts audio so nothing leaks.
@@ -666,11 +738,56 @@ export function useTvPlayer(channelId: string | null, options: PlayerOptions = {
     if (currentRef.current === null && slotsRef.current.length > 0) void goTo(now());
   }, [timeline.data, goTo, now]);
 
-  // Re-resolve the current program at the same spot on a quality/audio/subtitle change.
+  // Re-resolve the current program at the same spot on a quality change or audioMode change.
   useEffect(() => {
     if (currentRef.current?.kind === "PROGRAM") void goTo(currentEffective());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paramsKey]);
+
+  const selectAudio = useCallback(
+    (id?: string) => {
+      setSelectedAudioId(id);
+      if (currentRef.current?.mode === "direct") {
+        if (!id) {
+          setAudioTrack(1);
+          void viewRef.current?.setAudioTrack(1);
+        } else {
+          const t = tracks.audio.find((x) => x.id === id);
+          const idx = t?.index ?? 1;
+          setAudioTrack(idx);
+          void viewRef.current?.setAudioTrack(idx);
+        }
+      } else {
+        if (currentRef.current?.kind === "PROGRAM") {
+          void goTo(currentEffective());
+        }
+      }
+    },
+    [tracks.audio, currentEffective, goTo],
+  );
+
+  const selectSub = useCallback(
+    (id?: string) => {
+      const subId = id || "off";
+      setSelectedSubId(subId);
+      if (currentRef.current?.mode === "direct") {
+        if (subId === "off") {
+          setSubtitleTrack(-1);
+          void viewRef.current?.setSubtitleTrack(-1);
+        } else {
+          const t = tracks.subtitle.find((x) => x.id === subId);
+          const idx = t?.index ?? -1;
+          setSubtitleTrack(idx);
+          void viewRef.current?.setSubtitleTrack(idx);
+        }
+      } else {
+        if (currentRef.current?.kind === "PROGRAM") {
+          void goTo(currentEffective());
+        }
+      }
+    },
+    [tracks.subtitle, currentEffective, goTo],
+  );
 
   const controls = useMemo(
     () => ({
@@ -721,5 +838,21 @@ export function useTvPlayer(channelId: string | null, options: PlayerOptions = {
     [onLoad, onFirstFrame, onProgress, onBuffering, onError, onEnd],
   );
 
-  return { viewRef, source, startTime, mode, videoEvents, status, controls, tracks, titleOf };
+  return {
+    viewRef,
+    source,
+    startTime,
+    mode,
+    videoEvents,
+    status,
+    controls,
+    tracks,
+    titleOf,
+    audioTrack,
+    subtitleTrack,
+    selectedAudioId,
+    selectedSubId,
+    selectAudio,
+    selectSub,
+  };
 }

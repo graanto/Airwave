@@ -197,7 +197,18 @@ function PlayerHost({
   }, []);
   // Only build the scrubber when full-screen (the feature panel is the only consumer) — skip the per-tick
   // work while a mini feed is docked / off.
-  const tv = useTvPlayer(channelId, { quality, audioStreamId, subtitleStreamId, audioMode }, layout === "full");
+  const tv = useTvPlayer(
+    channelId,
+    {
+      quality,
+      audioStreamId,
+      subtitleStreamId,
+      audioMode,
+      defaultAudioLang: channel?.defaultAudioLang,
+      defaultSubtitleLang: channel?.defaultSubtitleLang,
+    },
+    layout === "full",
+  );
   const { status } = tv;
 
   // Ambient music bed under bumpers (§7.14 Phase B) now plays on the SINGLE hybrid engine, driven inside
@@ -242,10 +253,19 @@ function PlayerHost({
           pins it to the container's exact bounds (the container size comes from a Reanimated style,
           which doesn't drive flex layout). */}
       {tv.source != null && (
-        // Subtitles OFF by default: mpv otherwise auto-selects the embedded/forced sub track (sid=auto).
-        // In this app subs are delivered by SERVER burn-in (selecting them re-resolves to a transcode
-        // that hardcodes them into the video), so mpv must never render a text sub track itself.
-        <MpvPlayerView ref={tv.viewRef} source={tv.source} startTime={tv.startTime} mode={tv.mode} audioMode={audioMode} options={{ sid: "no", "sub-auto": "no" }} {...tv.videoEvents} style={StyleSheet.absoluteFill} contentFit={full ? "contain" : "cover"} />
+        <MpvPlayerView
+          ref={tv.viewRef}
+          source={tv.source}
+          startTime={tv.startTime}
+          mode={tv.mode}
+          audioMode={audioMode}
+          audioTrack={tv.audioTrack}
+          subtitleTrack={tv.subtitleTrack}
+          options={{ "sub-auto": "no" }}
+          {...tv.videoEvents}
+          style={StyleSheet.absoluteFill}
+          contentFit={full ? "contain" : "cover"}
+        />
       )}
 
       {/* bumper interstitial — full (blurred art + big title + donut) or compact (mini feed) */}
@@ -264,12 +284,18 @@ function PlayerHost({
           channel={channel}
           player={tv}
           quality={quality}
-          audioStreamId={audioStreamId}
-          subtitleStreamId={subtitleStreamId}
+          audioStreamId={tv.selectedAudioId ?? audioStreamId}
+          subtitleStreamId={tv.selectedSubId ?? subtitleStreamId}
           qualities={qualities}
           onSelectQuality={setQuality}
-          onSelectAudio={setAudioStreamId}
-          onSelectSub={setSubtitleStreamId}
+          onSelectAudio={(id) => {
+            setAudioStreamId(id);
+            tv.selectAudio(id);
+          }}
+          onSelectSub={(id) => {
+            setSubtitleStreamId(id);
+            tv.selectSub(id);
+          }}
           onBack={onBack}
         />
       )}

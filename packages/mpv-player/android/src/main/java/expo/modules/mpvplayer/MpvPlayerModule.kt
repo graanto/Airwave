@@ -111,6 +111,8 @@ class MpvPlayerModule : Module() {
       AsyncFunction("setLoop") { view: MpvPlayerView, loop: Boolean -> view.setLoop(loop) }
       AsyncFunction("setRate") { view: MpvPlayerView, rate: Double -> view.setRate(rate) }
       AsyncFunction("append") { view: MpvPlayerView, url: String, startTime: Double -> view.appendTrack(url, startTime) }
+      AsyncFunction("setAudioTrack") { view: MpvPlayerView, id: Int -> view.setAudioTrack(id) }
+      AsyncFunction("setSubtitleTrack") { view: MpvPlayerView, id: Int -> view.setSubtitleTrack(id) }
     }
   }
 

@@ -109,6 +109,8 @@ export type GuideChannel = {
   callsign: string | null;
   icon: string | null;
   tint: string | null;
+  defaultAudioLang?: string | null;
+  defaultSubtitleLang?: string | null;
   package: { id: string; key: string; icon: string | null; tint: string | null; name: string } | null;
 };
 
@@ -167,7 +169,7 @@ export type TimelineSlot = {
 };
 export type Timeline = { serverTime: string; slots: TimelineSlot[] };
 
-export type Track = { id: string; lang: string; label: string };
+export type Track = { id: string; lang: string; label: string; index?: number };
 
 export type MediaInfo = {
   mode: "direct" | "http" | "hls";

@@ -44,6 +44,8 @@ export type ChannelFormValues = {
   strategy: ChannelStrategy | null;
   sortField: string;
   sortDir: "asc" | "desc";
+  defaultAudioLang: string | null;
+  defaultSubtitleLang: string | null;
   packageId: string | null;
   icon: string | null;
   tint: string | null;
@@ -51,6 +53,30 @@ export type ChannelFormValues = {
   enabled: boolean;
   bumperMode: BumperMode;
 };
+
+const AUDIO_LANG_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "Default / Source" },
+  { value: "jpn", label: "Japanese (jpn)" },
+  { value: "eng", label: "English (eng)" },
+  { value: "spa", label: "Spanish (spa)" },
+  { value: "fra", label: "French (fra)" },
+  { value: "deu", label: "German (deu)" },
+  { value: "ita", label: "Italian (ita)" },
+  { value: "kor", label: "Korean (kor)" },
+  { value: "zho", label: "Chinese (zho)" },
+];
+
+const SUBTITLE_LANG_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "Off / Default" },
+  { value: "eng", label: "English (eng)" },
+  { value: "jpn", label: "Japanese (jpn)" },
+  { value: "spa", label: "Spanish (spa)" },
+  { value: "fra", label: "French (fra)" },
+  { value: "deu", label: "German (deu)" },
+  { value: "ita", label: "Italian (ita)" },
+  { value: "kor", label: "Korean (kor)" },
+  { value: "zho", label: "Chinese (zho)" },
+];
 
 const BUMPER_MODE_OPTIONS: { value: BumperMode; label: string }[] = [
   { value: "INHERIT", label: "Inherit global setting" },
@@ -140,6 +166,8 @@ export function ChannelForm({
   const [description, setDescription] = useState(initial?.description ?? "");
   const [enabled, setEnabled] = useState(initial?.enabled ?? true);
   const [bumperMode, setBumperMode] = useState<BumperMode>(initial?.bumperMode ?? "INHERIT");
+  const [defaultAudioLang, setDefaultAudioLang] = useState<string>(initial?.defaultAudioLang ?? "");
+  const [defaultSubtitleLang, setDefaultSubtitleLang] = useState<string>(initial?.defaultSubtitleLang ?? "");
   const [filter, setFilter] = useState<FilterGroup>(() => normalizeFilter(initial?.filter));
 
   const selectedPackage = packages.data?.find((p) => p.id === packageId);
@@ -190,6 +218,8 @@ export function ChannelForm({
       strategy,
       sortField,
       sortDir,
+      defaultAudioLang: defaultAudioLang.trim() || null,
+      defaultSubtitleLang: defaultSubtitleLang.trim() || null,
       packageId: packageId || null,
       icon,
       tint,
@@ -343,6 +373,49 @@ export function ChannelForm({
             </div>
           </div>
         )}
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <Label htmlFor="caudio">Default Audio Language</Label>
+            <Select value={defaultAudioLang} onValueChange={(v) => setDefaultAudioLang(v ?? "")}>
+              <SelectTrigger id="caudio" className="w-full">
+                <SelectValue>
+                  {(v) => AUDIO_LANG_OPTIONS.find((o) => o.value === v)?.label ?? (v ? v : "Default / Source")}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectPopup>
+                {AUDIO_LANG_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectPopup>
+            </Select>
+            <p className="text-muted-foreground text-xs">
+              Auto-select matching audio track (e.g. Japanese) on tune-in.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="csub">Default Subtitle Language</Label>
+            <Select value={defaultSubtitleLang} onValueChange={(v) => setDefaultSubtitleLang(v ?? "")}>
+              <SelectTrigger id="csub" className="w-full">
+                <SelectValue>
+                  {(v) => SUBTITLE_LANG_OPTIONS.find((o) => o.value === v)?.label ?? (v ? v : "Off / Default")}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectPopup>
+                {SUBTITLE_LANG_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectPopup>
+            </Select>
+            <p className="text-muted-foreground text-xs">
+              Auto-select matching subtitle track (e.g. English) on tune-in.
+            </p>
+          </div>
+        </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2">

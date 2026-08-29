@@ -15,6 +15,8 @@ const guideChannelSelect = {
   callsign: true,
   icon: true,
   tint: true,
+  defaultAudioLang: true,
+  defaultSubtitleLang: true,
   package: { select: { id: true, key: true, icon: true, tint: true, name: true } },
 } as const;
 

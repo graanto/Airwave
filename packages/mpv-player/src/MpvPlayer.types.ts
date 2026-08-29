@@ -108,4 +108,8 @@ export interface MpvPlayerViewRef {
   setRate: (rate: number) => Promise<void>;
   /** Queue a track AFTER the current one for GAPLESS handoff (radio). Call after a `source` load. */
   append: (url: string, startTime?: number) => Promise<void>;
+  /** Set mpv audio track id (`aid`). `-1` = auto/none. */
+  setAudioTrack: (id: number) => Promise<void>;
+  /** Set mpv subtitle track id (`sid`). `-1` = off. */
+  setSubtitleTrack: (id: number) => Promise<void>;
 }

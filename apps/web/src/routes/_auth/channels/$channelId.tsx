@@ -171,6 +171,8 @@ function ChannelDetail() {
               description: channel.data.description,
               enabled: channel.data.enabled,
               bumperMode: channel.data.bumperMode as BumperMode,
+              defaultAudioLang: channel.data.defaultAudioLang ?? null,
+              defaultSubtitleLang: channel.data.defaultSubtitleLang ?? null,
             }}
             onSubmit={async (v) => {
               setSubmitting(true);
@@ -186,6 +188,8 @@ function ChannelDetail() {
                   strategy: v.strategy,
                   sortField: v.sortField,
                   sortDir: v.sortDir,
+                  defaultAudioLang: v.defaultAudioLang,
+                  defaultSubtitleLang: v.defaultSubtitleLang,
                   packageId: v.packageId,
                   icon: v.icon,
                   tint: v.tint,

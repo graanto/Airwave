@@ -46,6 +46,8 @@ function NewChannel() {
                   strategy: v.strategy,
                   sortField: v.sortField,
                   sortDir: v.sortDir,
+                  defaultAudioLang: v.defaultAudioLang,
+                  defaultSubtitleLang: v.defaultSubtitleLang,
                   packageId: v.packageId,
                   icon: v.icon,
                   tint: v.tint,
