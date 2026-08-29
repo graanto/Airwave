@@ -7,7 +7,6 @@ import android.view.Gravity
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.widget.FrameLayout
-import expo.modules.core.interfaces.LifecycleEventListener
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
@@ -19,7 +18,7 @@ import expo.modules.kotlin.views.ExpoView
  */
 @SuppressLint("ViewConstructor")
 class MpvPlayerView(context: Context, appContext: AppContext) :
-  ExpoView(context, appContext), MpvCoreDelegate, SurfaceHolder.Callback, AudioFocusListener, LifecycleEventListener {
+  ExpoView(context, appContext), MpvCoreDelegate, SurfaceHolder.Callback, AudioFocusListener {
 
   private val core = MpvCore(context.applicationContext)
   private val audioFocusHelper = AudioFocusHelper(context.applicationContext, this)
@@ -84,7 +83,6 @@ class MpvPlayerView(context: Context, appContext: AppContext) :
     )
     addView(videoContainer)
     core.delegate = this
-    appContext.registerLifecycleListener(this)
   }
 
   // MARK: surface lifecycle
@@ -191,27 +189,6 @@ class MpvPlayerView(context: Context, appContext: AppContext) :
     core.setDucked(duck)
   }
 
-  // MARK: LifecycleEventListener
-
-  override fun onHostResume() {
-    // Activity resumed
-  }
-
-  override fun onHostPause() {
-    audioFocusHelper.abandonFocus()
-    surfaceView.keepScreenOn = false
-    core.setPaused(true)
-  }
-
-  override fun onHostDestroy() {
-    appContext.unregisterLifecycleListener(this)
-    audioFocusHelper.abandonFocus()
-    if (!disposed) {
-      disposed = true
-      core.dispose()
-    }
-  }
-
   // MARK: load coalescing
 
   private fun scheduleApply() {
@@ -283,7 +260,6 @@ class MpvPlayerView(context: Context, appContext: AppContext) :
 
   override fun onDetachedFromWindow() {
     super.onDetachedFromWindow()
-    appContext.unregisterLifecycleListener(this)
     audioFocusHelper.abandonFocus()
     if (!disposed) {
       disposed = true
