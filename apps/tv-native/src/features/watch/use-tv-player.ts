@@ -484,8 +484,10 @@ export function useTvPlayer(channelId: string | null, options: PlayerOptions = {
       // stays as a backstop.)
       console.log(`[mpv] onLoad play? paused=${pausedRef.current}`);
       if (!pausedRef.current) void viewRef.current?.play();
-      if (audioTrackRef.current != null && audioTrackRef.current > 0) void viewRef.current?.setAudioTrack(audioTrackRef.current);
-      if (subtitleTrackRef.current != null) void viewRef.current?.setSubtitleTrack(subtitleTrackRef.current);
+      if (currentRef.current?.mode === "direct") {
+        if (audioTrackRef.current != null && audioTrackRef.current > 0) void viewRef.current?.setAudioTrack(audioTrackRef.current);
+        if (subtitleTrackRef.current != null) void viewRef.current?.setSubtitleTrack(subtitleTrackRef.current);
+      }
       recordLog(width > 0 && height > 0 ? "playing" : "not_decoding");
       setStatus((s) => (s.buffering ? { ...s, buffering: false } : s));
     },
@@ -499,8 +501,10 @@ export function useTvPlayer(channelId: string | null, options: PlayerOptions = {
     // first painted frame) is a second, independent hook: if a load ever paints without onLoad's play()
     // sticking, this catches it. Guarded by pausedRef so a user pause is respected.
     if (!pausedRef.current) void viewRef.current?.play();
-    if (audioTrackRef.current != null && audioTrackRef.current > 0) void viewRef.current?.setAudioTrack(audioTrackRef.current);
-    if (subtitleTrackRef.current != null) void viewRef.current?.setSubtitleTrack(subtitleTrackRef.current);
+    if (currentRef.current?.mode === "direct") {
+      if (audioTrackRef.current != null && audioTrackRef.current > 0) void viewRef.current?.setAudioTrack(audioTrackRef.current);
+      if (subtitleTrackRef.current != null) void viewRef.current?.setSubtitleTrack(subtitleTrackRef.current);
+    }
     setStatus((s) => (s.buffering ? { ...s, buffering: false } : s));
   }, []);
   const onBuffering = useCallback((e: { nativeEvent: { buffering: boolean } }) => {
@@ -770,22 +774,11 @@ export function useTvPlayer(channelId: string | null, options: PlayerOptions = {
     (id?: string) => {
       setSelectedAudioId(id);
       selectedAudioIdRef.current = id;
-      if (currentRef.current?.mode === "direct") {
-        let idx = 1;
-        if (id) {
-          const t = tracks.audio.find((x) => x.id === id);
-          idx = t?.index ?? 1;
-        }
-        setAudioTrack(idx);
-        audioTrackRef.current = idx;
-        void viewRef.current?.setAudioTrack(idx);
-      } else {
-        if (currentRef.current?.kind === "PROGRAM") {
-          void goTo(currentEffective());
-        }
+      if (currentRef.current?.kind === "PROGRAM") {
+        void goTo(currentEffective());
       }
     },
-    [tracks.audio, currentEffective, goTo],
+    [currentEffective, goTo],
   );
 
   const selectSub = useCallback(
@@ -793,22 +786,11 @@ export function useTvPlayer(channelId: string | null, options: PlayerOptions = {
       const subId = id || "off";
       setSelectedSubId(subId);
       selectedSubIdRef.current = subId;
-      if (currentRef.current?.mode === "direct") {
-        let idx = -1;
-        if (subId !== "off") {
-          const t = tracks.subtitle.find((x) => x.id === subId);
-          idx = t?.index ?? -1;
-        }
-        setSubtitleTrack(idx);
-        subtitleTrackRef.current = idx;
-        void viewRef.current?.setSubtitleTrack(idx);
-      } else {
-        if (currentRef.current?.kind === "PROGRAM") {
-          void goTo(currentEffective());
-        }
+      if (currentRef.current?.kind === "PROGRAM") {
+        void goTo(currentEffective());
       }
     },
-    [tracks.subtitle, currentEffective, goTo],
+    [currentEffective, goTo],
   );
 
   const controls = useMemo(

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Airwave",
     "slug": "airwave",
-    "version": "0.12.29",
+    "version": "0.12.30",
     "scheme": "airwave",
     "orientation": "landscape",
     "userInterfaceStyle": "dark",
@@ -25,6 +25,7 @@
     },
     "android": {
       "package": "com.airwave.tv",
+      "versionCode": 30,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icons/android-adaptive-fg.png",
         "backgroundImage": "./assets/icons/android-adaptive-bg.png",
